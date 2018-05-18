@@ -6,4 +6,5 @@
 *.cgi
 *.exe
 *.log
+*.dcu
 Bin/images/*.bmp

@@ -55,8 +55,10 @@ unit EpikTimer;
   {$MODE DELPHI}{$H+}
 {$ENDIF}
 
+{$IFNDEF LINUX}
 {$IFNDEF FPC}
   {$DEFINE Windows}
+{$ENDIF}
 {$ENDIF}
 
 {$IFDEF Win32}
@@ -69,16 +71,31 @@ uses
 {$IFDEF Windows}
   Windows, MMSystem,
 {$ELSE}
-  unix, unixutil, baseunix,
-  {$IFDEF LINUX}
-  Linux,  // for clock_gettime() access
-  {$ENDIF}
-  {$IFDEF FreeBSD}
-  FreeBSD,  // for clock_gettime() access
+  {$IF CompilerVersion >= 32.0 }
+    // Delphi 10.2 already defines clock_gettime() and others in system unit;
+    //   no other unit needed.
+    Posix.Time, 
+  {$ELSE}
+    unix, unixutil, baseunix,
+    {$IFDEF LINUX}
+      Linux,  // for clock_gettime() access
+    {$ENDIF}
+    {$IFDEF FreeBSD}
+      FreeBSD,  // for clock_gettime() access
+    {$ENDIF}
   {$ENDIF}
 {$ENDIF}
   Classes, SysUtils, dateutils;
 
+{$IFDEF LINUX}  
+  {$IF not declared(QWord)}  
+    type QWord = UINT64;
+  {$ENDIF}
+  {$IF not declared(TTimeSpec)}  
+    type TTimeSpec = timespec;
+  {$ENDIF}
+{$ENDIF}  
+  
 Const
   DefaultSystemTicksPerSecond = 1000000; //Divisor for microsecond resolution
   { HW Tick frequency falls back to gated measurement if the initial system
@@ -388,6 +405,7 @@ function HardwareTicks:TickType; begin result:=0 end;
 
 function NullHardwareTicks:TickType; begin Result:=0 end;
 
+
 // Return microsecond normalized time source for a given platform.
 // This should be sync'able to an external time standard (via NTP, for example).
 function SystemTicks: TickType;
@@ -400,7 +418,9 @@ begin
   function _GetTickCount: QWord;
   var
     ts: TTimeSpec;
+	{$IF declared(fpgettimeofday)}
     t: timeval;
+	{$ENDIF}
   begin
     // use the Posix clock_gettime() call
     if clock_gettime(CLOCK_MONOTONIC, @ts)=0 then
@@ -408,9 +428,14 @@ begin
       Result := (TickType(ts.tv_sec) * MilliPerSec) + (ts.tv_nsec div NanoPerMilli);
       Exit;
     end;
+	{$IF declared(fpgettimeofday)}
     // Use the FPC fallback
     fpgettimeofday(@t,nil);
     Result := (TickType(t.tv_sec) * MilliPerSec) +  (t.tv_usec div 1000 { microsecond to millisecond });
+    {$ELSE}
+	// Use Delphi/Linux fallback
+    raise Exception.Create('epiktimer.pas: Feature 453 is not yet implemented!');
+	{$ENDIF}
   end;
 
 begin
@@ -552,20 +577,20 @@ end;
 function TEpikTimer.WallClockTime: String;
 var
   Y, D, M, hour, min, sec, ms, us: Word;
-{$IFNDEF Windows}
+{$IF declared(fpgettimeofday)}
   t: timeval;
 {$ENDIF}
 begin
-{$IFDEF Windows}
-  DecodeDatetime(Now, Y, D, M, Hour, min, Sec, ms);
-  us:=0;
-{$ELSE}
+{$IF declared(fpgettimeofday)}
   // "Now" doesn't report milliseconds on Linux... appears to be broken.
   // I opted for this approach which also provides microsecond precision.
   fpgettimeofday(@t,nil);
   EpochToLocal(t.tv_sec, Y, M, D, hour, min, sec);
   ms:=t.tv_usec div MilliPerSec;
   us:=t.tv_usec mod MilliPerSec;
+{$ELSE}
+  DecodeDatetime(Now, Y, D, M, Hour, min, Sec, ms);
+  us:=0;
 {$ENDIF}
   Result:='';
   If FWantDays then
