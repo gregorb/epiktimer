@@ -1,3 +1,16 @@
+ -----------------------------------------------------------------
+ 
+ ABOUT THIS FORK
+ 
+ This fork is a super lazy attempt to make epiktimers compatible 
+ with Delphi 10.2 for Linux. 
+ It compiles, it works for my application, may work for others as well,
+ but hasn't been tested much. Use at your own risk.
+
+ Original repo can be found here:
+ https://github.com/graemeg/epiktimer.git
+
+ -----------------------------------------------------------------
 
 
   Description: Precision timer/stopwatch component for Lazarus/FPC
